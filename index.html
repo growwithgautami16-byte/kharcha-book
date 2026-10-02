@@ -16,7 +16,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Source+Sans+3:wght@400;600;700&display=swap">
 <style>
 
-/* Layout: one narrow ledger column. Month and totals first, then budget lines, then quick add, then the entries. */
+/* Layout: one narrow ledger column with five tabs along the bottom: Month, Week, Settle, Bills, Goals. */
 :root{
   --bg:#F4F8F7; --surface:#FFFFFF; --fg:#1F2A30; --muted:#566A6F; --line:#D3E0DF; --tint:#E6F0EF;
   --accent:#0F4C5C; --accent-fg:#FFFFFF; --warm:#A3440A;
@@ -48,8 +48,10 @@ button{cursor:pointer}
 .totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .tot{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
 .tot b{display:block;font-family:var(--display);font-size:26px;margin-top:2px}
+.tot small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
 .tot.dark{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
 .tot.dark .label{color:inherit;opacity:.85}
+.tot.dark small{color:inherit;opacity:.85}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
 .panelhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .link{background:none;border:none;color:var(--accent);font-weight:600;padding:4px 0;text-decoration:underline}
@@ -57,6 +59,7 @@ button{cursor:pointer}
 .bar .track{grid-column:1/-1;height:8px;border-radius:4px;background:var(--tint);overflow:hidden}
 .bar .fill{height:100%;border-radius:4px;background:var(--accent)}
 .bar.warn .fill{background:var(--warn)} .bar.over .fill{background:var(--bad)}
+.bar.good .fill{background:var(--ok)}
 .bar .sub{grid-column:1/-1;font-size:12.5px;color:var(--muted)}
 .bar input{width:96px;text-align:right;border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:4px 8px}
 .form{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
@@ -69,6 +72,7 @@ button{cursor:pointer}
 .seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg)}
 .primary{background:var(--warm);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-weight:700}
 .primary:disabled{opacity:.6;cursor:default}
+.ghost{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 14px;font-weight:600}
 .msg{font-size:13.5px;min-height:1.2em}
 .msg.err{color:var(--bad)}
 .day{display:flex;flex-direction:column}
@@ -86,13 +90,45 @@ button{cursor:pointer}
 .confirm button.yes{background:var(--bad);color:#fff;border-color:var(--bad)}
 
 html{-webkit-text-size-adjust:100%}
-body{margin:0;padding-top:calc(20px + env(safe-area-inset-top,0px));padding-bottom:calc(48px + env(safe-area-inset-bottom,0px))}
+body{margin:0;padding-top:calc(20px + env(safe-area-inset-top,0px));padding-bottom:calc(92px + env(safe-area-inset-bottom,0px))}
 [hidden]{display:none!important}
 input,select{font-size:16px} /* stops iPhone zooming into fields */
 .login{max-width:380px;margin:12vh auto 0;display:flex;flex-direction:column;gap:14px}
 .login .panel{gap:14px}
 .whoami{font-size:13px;color:var(--muted);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .offline{background:var(--warn);color:#fff;border-radius:8px;padding:8px 12px;font-size:13.5px}
+
+/* tabs */
+.tab{display:flex;flex-direction:column;gap:20px}
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabbar button{flex:1;border:none;background:none;padding:12px 4px 10px;font-size:13px;font-weight:700;color:var(--muted);box-shadow:inset 0 3px 0 transparent}
+.tabbar button[aria-pressed="true"]{color:var(--accent);box-shadow:inset 0 3px 0 var(--accent)}
+
+/* log the whole day */
+.drow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:8px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.drow .field input,.drow .field select{background:var(--surface)}
+.drow .wide{grid-column:1/-1}
+.drows{display:flex;flex-direction:column;gap:10px}
+.daytotal{font-weight:700}
+
+/* week, settle, bills, goals */
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:var(--bg);border-radius:99px;padding:6px 12px;font-weight:600;font-size:13.5px}
+.kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:baseline}
+.kv .k{color:var(--muted)}
+.kv .v{font-weight:700;text-align:right}
+.big{font-family:var(--display);font-size:24px;line-height:1.2}
+.inl{width:84px;text-align:right;border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:4px 8px}
+.inl.sm{width:56px}
+.billrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:12px 0;border-bottom:1px solid var(--line);align-items:center}
+.billrow .name{font-weight:700;overflow-wrap:anywhere}
+.billrow .meta{font-size:12.5px;color:var(--muted)}
+.billrow .ctl{grid-column:1/-1;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13.5px}
+.goal{display:flex;flex-direction:column;gap:8px;padding:14px 0;border-bottom:1px solid var(--line)}
+.goal .gh{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.goal .gname{font-weight:700;overflow-wrap:anywhere}
+.goal .dep{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.goal .dep input{width:120px;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px}
 </style>
 </head>
 <body>
@@ -116,7 +152,7 @@ input,select{font-size:16px} /* stops iPhone zooming into fields */
       <div class="label">Akash and Gautami</div>
       <h1>Kharcha Book</h1>
     </div>
-    <div class="months">
+    <div class="months" id="monthnav">
       <button class="ibtn" id="prev" aria-label="Previous month">&#8249;</button>
       <div class="monthname" id="monthname"></div>
       <button class="ibtn" id="next" aria-label="Next month">&#8250;</button>
@@ -125,48 +161,178 @@ input,select{font-size:16px} /* stops iPhone zooming into fields */
 
   <div id="offline" class="offline" hidden>You're offline. New entries will sync when you're connected again.</div>
 
-  <div class="totals" id="totals"></div>
+  <!-- MONTH -->
+  <div class="tab" id="tab-month">
+    <div class="totals" id="totals"></div>
 
-  <section class="panel" aria-labelledby="ah">
-    <h2 id="ah">Add an expense</h2>
-    <form id="form" class="form" autocomplete="off">
-      <label class="field"><span>Amount (₹)</span><input id="amount" type="number" inputmode="decimal" min="1" step="any" placeholder="450" required></label>
-      <label class="field"><span>Category</span><select id="category"></select></label>
-      <label class="field"><span>Date</span><input id="date" type="date" required></label>
-      <div class="field" style="grid-column:1/-1"><span>Paid from</span>
-        <div class="seg" id="paid">
-          <button type="button" data-v="Joint account" aria-pressed="true">Joint account</button>
-          <button type="button" data-v="Gautami" aria-pressed="false">Gautami</button>
-          <button type="button" data-v="Akash" aria-pressed="false">Akash</button>
+    <section class="panel" aria-labelledby="ah">
+      <div class="panelhead">
+        <h2 id="ah">Add expenses</h2>
+        <div class="seg" id="mode" style="min-width:200px">
+          <button type="button" data-v="day" aria-pressed="true">Whole day</button>
+          <button type="button" data-v="one" aria-pressed="false">One expense</button>
         </div>
       </div>
-      <label class="field" style="grid-column:1/-1"><span>Note (optional)</span><input id="note" type="text" maxlength="120" placeholder="Vegetables from the market"></label>
-      <div style="grid-column:1/-1;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-        <button class="primary" id="addbtn" type="submit">Add expense</button>
-        <span class="msg" id="addmsg" role="status"></span>
+
+      <form id="dayform" autocomplete="off">
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <label class="field" style="max-width:220px"><span>Day</span><input id="dday" type="date" required></label>
+          <div class="drows" id="drows"></div>
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <button class="ghost" id="addrow" type="button">+ Add a row</button>
+            <span class="daytotal num" id="daytotal"></span>
+          </div>
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <button class="primary" id="daysave" type="submit">Save the day</button>
+            <span class="msg" id="daymsg" role="status"></span>
+          </div>
+        </div>
+      </form>
+
+      <form id="form" class="form" autocomplete="off" hidden>
+        <label class="field"><span>Amount (₹)</span><input id="amount" type="number" inputmode="decimal" min="1" step="any" placeholder="450"></label>
+        <label class="field"><span>Category</span><select id="category"></select></label>
+        <label class="field"><span>Date</span><input id="date" type="date"></label>
+        <div class="field" style="grid-column:1/-1"><span>Paid from</span>
+          <div class="seg" id="paid">
+            <button type="button" data-v="Joint account" aria-pressed="true">Joint account</button>
+            <button type="button" data-v="Gautami" aria-pressed="false">Gautami</button>
+            <button type="button" data-v="Akash" aria-pressed="false">Akash</button>
+          </div>
+        </div>
+        <label class="field" style="grid-column:1/-1"><span>Note (optional)</span><input id="note" type="text" maxlength="120" placeholder="Vegetables from the market"></label>
+        <div style="grid-column:1/-1;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <button class="primary" id="addbtn" type="submit">Add expense</button>
+          <span class="msg" id="addmsg" role="status"></span>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel" aria-labelledby="bh">
+      <div class="panelhead">
+        <h2 id="bh">Budget lines</h2>
+        <button class="link" id="editbudgets" type="button">Edit budgets</button>
       </div>
-    </form>
-  </section>
+      <div id="bars" style="display:flex;flex-direction:column;gap:14px"></div>
+    </section>
 
-  <section class="panel" aria-labelledby="bh">
-    <div class="panelhead">
-      <h2 id="bh">Budget lines</h2>
-      <button class="link" id="editbudgets" type="button">Edit budgets</button>
-    </div>
-    <div id="bars" style="display:flex;flex-direction:column;gap:14px"></div>
-  </section>
+    <section class="panel" aria-labelledby="eh">
+      <div class="panelhead">
+        <h2 id="eh">This month's entries</h2>
+        <button class="link" id="sumbtn" type="button" hidden>Month summary</button>
+      </div>
+      <div id="summary" class="summary" hidden></div>
+      <div id="list"></div>
+    </section>
+  </div>
 
-  <section class="panel" aria-labelledby="eh">
+  <!-- WEEK -->
+  <div class="tab" id="tab-week" hidden>
     <div class="panelhead">
-      <h2 id="eh">This month's entries</h2>
-      <button class="link" id="sumbtn" type="button" hidden>Month summary</button>
+      <div>
+        <div class="label">Weekly check-in</div>
+        <h2 id="weektitle"></h2>
+      </div>
+      <div class="months">
+        <button class="ibtn" id="wprev" aria-label="Previous week">&#8249;</button>
+        <button class="ibtn" id="wnext" aria-label="Next week">&#8250;</button>
+      </div>
     </div>
-    <div id="summary" class="summary" hidden></div>
-    <div id="list"></div>
-  </section>
+    <div class="totals" id="weektotals"></div>
+    <section class="panel" aria-labelledby="wh1">
+      <h2 id="wh1">Days with nothing logged</h2>
+      <div id="missing"></div>
+    </section>
+    <section class="panel" aria-labelledby="wh2">
+      <h2 id="wh2">Where it went</h2>
+      <div id="weekcats" style="display:flex;flex-direction:column;gap:14px"></div>
+    </section>
+    <section class="panel" aria-labelledby="wh3">
+      <h2 id="wh3">Budget watch</h2>
+      <div id="watch"></div>
+    </section>
+  </div>
+
+  <!-- SETTLE -->
+  <div class="tab" id="tab-settle" hidden>
+    <section class="panel" aria-labelledby="sh">
+      <h2 id="sh">Settle up</h2>
+      <div id="settlebox"></div>
+    </section>
+    <section class="panel" aria-labelledby="sh2">
+      <h2 id="sh2">How costs are shared</h2>
+      <div class="field" style="max-width:260px"><span id="splitlabel"></span><input id="splitpct" type="number" inputmode="numeric" min="0" max="100" step="1"></div>
+      <div class="muted" id="splitnote"></div>
+    </section>
+    <section class="panel" aria-labelledby="sh3">
+      <h2 id="sh3">Payments between you</h2>
+      <div id="payments"></div>
+    </section>
+  </div>
+
+  <!-- BILLS -->
+  <div class="tab" id="tab-bills" hidden>
+    <section class="panel" aria-labelledby="bh1">
+      <h2 id="bh1">Recurring bills</h2>
+      <div class="muted">These are added to the book by themselves on their day, so you do not have to enter them.</div>
+      <div id="billlist"></div>
+      <div id="usualwrap" hidden>
+        <button class="ghost" id="usual" type="button">Add the usual bills</button>
+        <div class="muted" style="margin-top:6px">Rent, cook, WiFi, light bill and gas, with the amounts from your budgets. You can change each amount and day afterwards.</div>
+      </div>
+    </section>
+    <section class="panel" aria-labelledby="bh2">
+      <h2 id="bh2">Add a recurring bill</h2>
+      <form id="billform" class="form" autocomplete="off">
+        <label class="field"><span>Category</span><select id="bcat"></select></label>
+        <label class="field"><span>Label (optional)</span><input id="blabel" type="text" maxlength="60" placeholder="Flat rent"></label>
+        <label class="field"><span>Amount each time (₹)</span><input id="bamt" type="number" inputmode="decimal" min="1" step="any"></label>
+        <label class="field"><span>Day of month</span><input id="bday" type="number" inputmode="numeric" min="1" max="31" value="1"></label>
+        <label class="field"><span>Repeats every</span>
+          <select id="bevery"><option value="1">Month</option><option value="2">2 months</option><option value="3">3 months</option><option value="6">6 months</option><option value="12">Year</option></select>
+        </label>
+        <label class="field"><span>First bill month</span><input id="bstart" type="month"></label>
+        <div class="field" style="grid-column:1/-1"><span>Paid from</span>
+          <select id="bpaid"></select>
+        </div>
+        <div style="grid-column:1/-1;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <button class="primary" type="submit">Add bill</button>
+          <span class="msg" id="billmsg" role="status"></span>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <!-- GOALS -->
+  <div class="tab" id="tab-goals" hidden>
+    <section class="panel" aria-labelledby="gh1">
+      <h2 id="gh1">Savings goals</h2>
+      <div id="goallist"></div>
+    </section>
+    <section class="panel" aria-labelledby="gh2">
+      <h2 id="gh2">Add a goal</h2>
+      <form id="goalform" class="form" autocomplete="off">
+        <label class="field" style="grid-column:1/-1"><span>Goal</span><input id="gname" type="text" maxlength="60" placeholder="Emergency fund" required></label>
+        <label class="field"><span>Target (₹)</span><input id="gtarget" type="number" inputmode="decimal" min="1" step="any" required></label>
+        <label class="field"><span>Plan to save each month (₹)</span><input id="gmonthly" type="number" inputmode="decimal" min="0" step="any"></label>
+        <div style="grid-column:1/-1;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <button class="primary" type="submit">Add goal</button>
+          <span class="msg" id="goalmsg" role="status"></span>
+        </div>
+      </form>
+    </section>
+  </div>
 
   <div class="whoami"><span id="who"></span><button class="link" id="signout" type="button">Sign out</button></div>
 </div>
+
+<nav class="tabbar" id="tabbar" aria-label="Sections" hidden>
+  <button type="button" data-tab="month" aria-pressed="true">Month</button>
+  <button type="button" data-tab="week" aria-pressed="false">Week</button>
+  <button type="button" data-tab="settle" aria-pressed="false">Settle</button>
+  <button type="button" data-tab="bills" aria-pressed="false">Bills</button>
+  <button type="button" data-tab="goals" aria-pressed="false">Goals</button>
+</nav>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>

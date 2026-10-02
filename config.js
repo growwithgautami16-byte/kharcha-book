@@ -35,3 +35,20 @@ window.CATEGORIES = [
   { n: "Festivals and repairs", b: 0 },
   { n: "Other", b: 0 }
 ];
+
+// 4. How shared costs are split. This is Gautami's share in percent;
+//    Akash covers the rest. You can also change it inside the app (Settle tab).
+window.SPLIT = { first: 34 };
+
+// 5. Categories that count as "everyday spending" in the weekly check-in.
+window.EVERYDAY = ["Groceries", "Eating out", "Other"];
+
+// 6. Bills added by the "Add the usual bills" button (Bills tab).
+//    The amount comes from the budget above (times "every" for two-monthly bills).
+window.USUAL_BILLS = [
+  { cat: "Rent", day: 1, paid: "Joint account" },
+  { cat: "Cook", day: 1, paid: "Joint account" },
+  { cat: "WiFi and subscriptions", day: 1, paid: "Joint account" },
+  { cat: "Light bill", day: 1, paid: "Joint account" },
+  { cat: "Gas", day: 1, paid: "Joint account" }
+];

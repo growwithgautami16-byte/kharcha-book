@@ -15,6 +15,15 @@ service cloud.firestore {
         && request.resource.data.amount < 10000000
         && request.resource.data.month is string;
     }
+    match /settlements/{id} {
+      allow read, write: if isUs();
+    }
+    match /recurring/{id} {
+      allow read, write: if isUs();
+    }
+    match /goals/{id} {
+      allow read, write: if isUs();
+    }
     match /settings/{id} {
       allow read, write: if isUs();
     }
