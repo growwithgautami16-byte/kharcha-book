@@ -55,15 +55,16 @@
     var keys = Object.keys(S.hist).filter(function (k) { return k.charAt(0) === 'm' && k.slice(1) <= mk; }).sort();
     if (keys.length) {
       var h = S.hist[keys[keys.length - 1]] || {};
-      return { cats: h.cats || S.budgets, personal: h.personal || S.pbase, split: typeof h.split === 'number' ? h.split : S.split };
+      return { cats: h.cats || S.budgets, personal: h.personal || S.pbase, income: h.income || {}, split: typeof h.split === 'number' ? h.split : S.split };
     }
-    return { cats: S.budgets, personal: S.pbase, split: S.split };
+    return { cats: S.budgets, personal: S.pbase, income: {}, split: S.split };
   }
+  function incomeOf(name, mk) { return Number(cfg(mk || monthKey()).income[name]) || 0; }
   function budgetOf(n, mk) { return Number(cfg(mk || monthKey()).cats[n]) || 0; }
   function pBud(name, mk) { return Number(cfg(mk || monthKey()).personal[name]) || 0; }
   function splitOf(mk) { var v = cfg(mk || monthKey()).split; return v >= 0 && v <= 100 ? v : 50; }
   function saveCfg(mk, change) { // saves the whole set for this month; later months keep their own
-    var c = cfg(mk), snap = { cats: Object.assign({}, c.cats), personal: Object.assign({}, c.personal), split: c.split };
+    var c = cfg(mk), snap = { cats: Object.assign({}, c.cats), personal: Object.assign({}, c.personal), income: Object.assign({}, c.income), split: c.split };
     change(snap);
     S.hist['m' + mk] = snap;
     var o = {}; o['m' + mk] = snap;
@@ -318,6 +319,15 @@
   /* ---------- personal tab ---------- */
   function renderPersonal() {
     var mk = monthKey(), me = nameOf(S.user && S.user.email), html = '';
+    var totI = incomeOf(N1, mk) + incomeOf(N2, mk), totJ = CATS.reduce(function (s, c) { return s + budgetOf(c.n, mk); }, 0), totP = pBud(N1, mk) + pBud(N2, mk);
+    html += '<section class="panel"><div class="panelhead"><h2>Income</h2></div>';
+    [N1, N2].forEach(function (n) {
+      html += '<div class="kv"><span class="k">' + esc(n) + (n === me ? ' (you), monthly' : ', monthly') + '</span><span class="v num">' +
+        (n === me ? '<input class="inl" type="number" inputmode="numeric" min="0" step="1000" data-inc="' + esc(n) + '" value="' + incomeOf(n, mk) + '" aria-label="Monthly income for ' + esc(n) + '">' : rs(incomeOf(n, mk))) + '</span></div>';
+    });
+    html += '<div class="kv"><span class="k">Household budget + personal budgets</span><span class="v num">' + rs(totJ + totP) + '</span></div>' +
+      '<div class="kv"><span class="k">' + (totI - totJ - totP >= 0 ? 'Left to save' : 'Over income by') + '</span><span class="v num">' + rs(Math.abs(totI - totJ - totP)) + '</span></div>' +
+      '<div class="muted">A change applies from ' + esc(monthLabel()) + ' onward, so earlier months keep their old numbers.</div></section>';
     [N1, N2].forEach(function (n) {
       var list = S.expenses.filter(function (e) { return isPers(e) && ownerOf(e) === n; }).sort(function (a, b) {
         if (a.date !== b.date) return a.date < b.date ? 1 : -1;
@@ -620,6 +630,8 @@
   }
   ['list', 'pbox', 'payments', 'billlist', 'goallist', 'missing'].forEach(function (id) { $(id).addEventListener('click', confirmClicks); });
   $('pbox').addEventListener('change', function (ev) {
+    var inc = ev.target.getAttribute && ev.target.getAttribute('data-inc');
+    if (inc) { var iv = Math.max(0, Number(ev.target.value) || 0); saveCfg(monthKey(), function (snap) { snap.income[inc] = iv; }); return; }
     var n = ev.target.getAttribute && ev.target.getAttribute('data-pbud'); if (!n) return;
     var v = Math.max(0, Number(ev.target.value) || 0);
     saveCfg(monthKey(), function (snap) { snap.personal[n] = v; });
