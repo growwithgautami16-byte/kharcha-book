@@ -16,7 +16,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Source+Sans+3:wght@400;600;700&display=swap">
 <style>
 
-/* Layout: one narrow ledger column with five tabs along the bottom: Month, Week, Settle, Bills, Goals. */
+/* Layout: one narrow ledger column with six tabs along the bottom: Month, Week, Settle, Personal, Bills, Goals. */
 :root{
   --bg:#F4F8F7; --surface:#FFFFFF; --fg:#1F2A30; --muted:#566A6F; --line:#D3E0DF; --tint:#E6F0EF;
   --accent:#0F4C5C; --accent-fg:#FFFFFF; --warm:#A3440A;
@@ -101,7 +101,7 @@ input,select{font-size:16px} /* stops iPhone zooming into fields */
 /* tabs */
 .tab{display:flex;flex-direction:column;gap:20px}
 .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
-.tabbar button{flex:1;border:none;background:none;padding:12px 4px 10px;font-size:13px;font-weight:700;color:var(--muted);box-shadow:inset 0 3px 0 transparent}
+.tabbar button{flex:1;min-width:0;border:none;background:none;padding:12px 2px 10px;font-size:12.5px;font-weight:700;color:var(--muted);box-shadow:inset 0 3px 0 transparent}
 .tabbar button[aria-pressed="true"]{color:var(--accent);box-shadow:inset 0 3px 0 var(--accent)}
 
 /* log the whole day */
@@ -193,13 +193,7 @@ input,select{font-size:16px} /* stops iPhone zooming into fields */
         <label class="field"><span>Amount (₹)</span><input id="amount" type="number" inputmode="decimal" min="1" step="any" placeholder="450"></label>
         <label class="field"><span>Category</span><select id="category"></select></label>
         <label class="field"><span>Date</span><input id="date" type="date"></label>
-        <div class="field" style="grid-column:1/-1"><span>Paid from</span>
-          <div class="seg" id="paid">
-            <button type="button" data-v="Joint account" aria-pressed="true">Joint account</button>
-            <button type="button" data-v="Gautami" aria-pressed="false">Gautami</button>
-            <button type="button" data-v="Akash" aria-pressed="false">Akash</button>
-          </div>
-        </div>
+        <label class="field" style="grid-column:1/-1"><span>Paid from</span><select id="paidsel"></select></label>
         <label class="field" style="grid-column:1/-1"><span>Note (optional)</span><input id="note" type="text" maxlength="120" placeholder="Vegetables from the market"></label>
         <div style="grid-column:1/-1;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
           <button class="primary" id="addbtn" type="submit">Add expense</button>
@@ -213,6 +207,7 @@ input,select{font-size:16px} /* stops iPhone zooming into fields */
         <h2 id="bh">Budget lines</h2>
         <button class="link" id="editbudgets" type="button">Edit budgets</button>
       </div>
+      <div class="muted" id="budnote" hidden></div>
       <div id="bars" style="display:flex;flex-direction:column;gap:14px"></div>
     </section>
 
@@ -268,6 +263,11 @@ input,select{font-size:16px} /* stops iPhone zooming into fields */
       <h2 id="sh3">Payments between you</h2>
       <div id="payments"></div>
     </section>
+  </div>
+
+  <!-- PERSONAL -->
+  <div class="tab" id="tab-personal" hidden>
+    <div id="pbox" class="tab"></div>
   </div>
 
   <!-- BILLS -->
@@ -330,6 +330,7 @@ input,select{font-size:16px} /* stops iPhone zooming into fields */
   <button type="button" data-tab="month" aria-pressed="true">Month</button>
   <button type="button" data-tab="week" aria-pressed="false">Week</button>
   <button type="button" data-tab="settle" aria-pressed="false">Settle</button>
+  <button type="button" data-tab="personal" aria-pressed="false">Personal</button>
   <button type="button" data-tab="bills" aria-pressed="false">Bills</button>
   <button type="button" data-tab="goals" aria-pressed="false">Goals</button>
 </nav>

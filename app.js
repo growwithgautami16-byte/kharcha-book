@@ -4,7 +4,13 @@
   var NAMES = Object.keys(PEOPLE).map(function (k) { return PEOPLE[k]; });
   var N1 = NAMES[0] || 'Gautami', N2 = NAMES[1] || 'Akash';
   var EVERYDAY = window.EVERYDAY || [];
-  var PAYERS = ['Joint account', N1, N2];
+  var JOINT = 'Joint account';
+  var PAYERS = [JOINT, N1, N2];
+  var PCATS = window.PERSONAL_CATS || ['Shopping', 'Food and coffee', 'Fun and outings', 'Self-care', 'Gifts', 'Other'];
+  var PREFIX = 'Personal: ';
+  function isPers(e) { return (e.paidFrom || '').indexOf(PREFIX) === 0; }
+  function ownerOf(e) { return (e.paidFrom || '').slice(PREFIX.length); }
+  function sharedOnly(list) { return list.filter(function (e) { return !isPers(e); }); }
   var inr = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
   function rs(n) { return (n < 0 ? '-' : '') + '₹' + inr.format(Math.round(Math.abs(n))); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -25,13 +31,14 @@
   var t0 = new Date();
   var S = {
     year: t0.getFullYear(), month: t0.getMonth(), today: ymd(t0),
-    expenses: [], curExp: [], weekExp: [], settle: [], recurring: [], goals: [], budgets: {}, skips: {},
+    expenses: [], curExp: [], weekExp: [], settle: [], recurring: [], goals: [], budgets: {}, skips: {}, hist: {}, pbase: {},
     split: Number(window.SPLIT && window.SPLIT.first), editing: false, confirm: null, paid: 'Joint account',
     tab: 'month', mode: lsGet('kb-mode') === 'one' ? 'one' : 'day', weekOff: 0,
     user: null, u: {}, recLoaded: false, skipLoaded: false, gen: {}
   };
   if (!(S.split >= 0 && S.split <= 100)) S.split = 50;
   CATS.forEach(function (c) { S.budgets[c.n] = c.b; });
+  (function initPersonalBase() { var pb = window.PERSONAL_BUDGET || {}; S.pbase[N1] = Number(pb[N1]) || 0; S.pbase[N2] = Number(pb[N2]) || 0; })();
 
   if (!window.FIREBASE_CONFIG || window.FIREBASE_CONFIG.apiKey === 'PASTE_HERE') {
     document.body.innerHTML = '<div class="wrap" style="padding-top:40px"><h1>Kharcha Book</h1><div class="banner">Setup is not finished: paste your Firebase config into config.js, then upload the folder again.</div></div>';
@@ -44,10 +51,35 @@
 
   function monthKey() { return S.year + '-' + pad(S.month + 1); }
   function monthLabel() { return monthName(monthKey()); }
-  function budgetOf(n) { return Number(S.budgets[n]) || 0; }
+  function cfg(mk) {
+    var keys = Object.keys(S.hist).filter(function (k) { return k.charAt(0) === 'm' && k.slice(1) <= mk; }).sort();
+    if (keys.length) {
+      var h = S.hist[keys[keys.length - 1]] || {};
+      return { cats: h.cats || S.budgets, personal: h.personal || S.pbase, split: typeof h.split === 'number' ? h.split : S.split };
+    }
+    return { cats: S.budgets, personal: S.pbase, split: S.split };
+  }
+  function budgetOf(n, mk) { return Number(cfg(mk || monthKey()).cats[n]) || 0; }
+  function pBud(name, mk) { return Number(cfg(mk || monthKey()).personal[name]) || 0; }
+  function splitOf(mk) { var v = cfg(mk || monthKey()).split; return v >= 0 && v <= 100 ? v : 50; }
+  function saveCfg(mk, change) { // saves the whole set for this month; later months keep their own
+    var c = cfg(mk), snap = { cats: Object.assign({}, c.cats), personal: Object.assign({}, c.personal), split: c.split };
+    change(snap);
+    S.hist['m' + mk] = snap;
+    var o = {}; o['m' + mk] = snap;
+    db.collection('settings').doc('history').set(o, { merge: true }).catch(function () {});
+    renderAll(); renderWeek(); renderPersonal();
+  }
   function curMk() { return mkOf(new Date()); }
-  function catOptions() { return CATS.map(function (c) { return '<option>' + esc(c.n) + '</option>'; }).join(''); }
-  function payOptions() { return PAYERS.map(function (p) { return '<option>' + esc(p) + '</option>'; }).join(''); }
+  function catOptions(personal) {
+    var list = personal ? PCATS : CATS.map(function (c) { return c.n; });
+    return list.map(function (n) { return '<option>' + esc(n) + '</option>'; }).join('');
+  }
+  function payOptions(personal) {
+    var h = PAYERS.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p === JOINT ? p : p + ' (own account)') + '</option>'; }).join('');
+    if (personal) h += [N1, N2].map(function (n) { return '<option value="' + esc(PREFIX + n) + '">' + esc(n + ', personal') + '</option>'; }).join('');
+    return h;
+  }
   function sub(name, q, fn, err) {
     if (S.u[name]) S.u[name]();
     S.u[name] = q.onSnapshot(fn, err || function () {});
@@ -56,7 +88,7 @@
   /* ---------- month tab ---------- */
   function renderTotals() {
     var spent = 0, joint = 0, bud = 0;
-    S.expenses.forEach(function (e) { spent += e.amount; if (e.paidFrom === 'Joint account') joint += e.amount; });
+    sharedOnly(S.expenses).forEach(function (e) { spent += e.amount; if (e.paidFrom === JOINT) joint += e.amount; });
     CATS.forEach(function (c) { bud += budgetOf(c.n); });
     var left = bud - spent;
     $('totals').innerHTML =
@@ -68,7 +100,7 @@
 
   function renderBars() {
     var byCat = {};
-    S.expenses.forEach(function (e) { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
+    sharedOnly(S.expenses).forEach(function (e) { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
     var html = '';
     CATS.forEach(function (c) {
       var spent = byCat[c.n] || 0, b = budgetOf(c.n), cap = b * (c.every || 1);
@@ -86,17 +118,19 @@
     });
     $('bars').innerHTML = html;
     $('editbudgets').textContent = S.editing ? 'Done' : 'Edit budgets';
+    $('budnote').hidden = !S.editing;
+    $('budnote').textContent = 'Changes apply from ' + monthLabel() + ' onward. Earlier months keep their old amounts.';
   }
 
   function renderList() {
-    var list = $('list');
-    if (!S.expenses.length) {
+    var list = $('list'), shared = sharedOnly(S.expenses);
+    if (!shared.length) {
       list.innerHTML = '<div class="empty">No entries for ' + esc(monthLabel()) + ' yet.<br>Add the first one above. Both of you see the same list.</div>';
       $('sumbtn').hidden = true; $('summary').hidden = true;
       return;
     }
     $('sumbtn').hidden = false;
-    var sorted = S.expenses.slice().sort(function (a, b) {
+    var sorted = shared.slice().sort(function (a, b) {
       if (a.date !== b.date) return a.date < b.date ? 1 : -1;
       return (b.createdAt || 0) - (a.createdAt || 0);
     });
@@ -123,7 +157,7 @@
 
   function summary() {
     var byCat = {}, byPay = {}, spent = 0, bud = 0;
-    S.expenses.forEach(function (e) { spent += e.amount; byCat[e.category] = (byCat[e.category] || 0) + e.amount; byPay[e.paidFrom] = (byPay[e.paidFrom] || 0) + e.amount; });
+    sharedOnly(S.expenses).forEach(function (e) { spent += e.amount; byCat[e.category] = (byCat[e.category] || 0) + e.amount; byPay[e.paidFrom] = (byPay[e.paidFrom] || 0) + e.amount; });
     CATS.forEach(function (c) { bud += budgetOf(c.n); });
     var lines = [];
     lines.push(monthLabel() + ': ' + rs(spent) + ' spent against a ' + rs(bud) + ' budget (' + (spent <= bud ? rs(bud - spent) + ' left' : rs(spent - bud) + ' over') + ').');
@@ -154,7 +188,7 @@
     return '<div class="drow">' +
       '<label class="field"><span>Amount (₹)</span><input class="d-amt" type="number" inputmode="decimal" min="1" step="any" placeholder="450"></label>' +
       '<label class="field"><span>Category</span><select class="d-cat">' + catOptions() + '</select></label>' +
-      '<label class="field wide"><span>Paid from</span><select class="d-paid">' + payOptions() + '</select></label>' +
+      '<label class="field wide"><span>Paid from</span><select class="d-paid">' + payOptions(true) + '</select></label>' +
       '<label class="field wide"><span>Note (optional)</span><input class="d-note" type="text" maxlength="120"></label></div>';
   }
   function resetRows() {
@@ -199,13 +233,13 @@
     msg.className = 'msg';
     if (!(amt > 0)) { msg.className = 'msg err'; msg.textContent = 'Enter an amount above zero.'; return; }
     var date = $('date').value; if (!date) { msg.className = 'msg err'; msg.textContent = 'Pick a date.'; return; }
-    var rec = { amount: Math.round(amt * 100) / 100, category: $('category').value, paidFrom: S.paid, note: $('note').value.trim(), date: date, month: date.slice(0, 7), createdAt: Date.now(), by: (S.user && S.user.email) || '' };
+    var rec = { amount: Math.round(amt * 100) / 100, category: $('category').value, paidFrom: $('paidsel').value, note: $('note').value.trim(), date: date, month: date.slice(0, 7), createdAt: Date.now(), by: (S.user && S.user.email) || '' };
     db.collection('expenses').add(rec).catch(function (e) {
       msg.className = 'msg err';
       msg.textContent = e && e.code === 'permission-denied' ? 'Not saved: this login is not allowed to write.' : 'Not saved. Try again.';
     });
     $('amount').value = ''; $('note').value = '';
-    msg.textContent = 'Added ' + rs(rec.amount) + ' to ' + rec.category + '.';
+    msg.textContent = 'Added ' + rs(rec.amount) + ' to ' + rec.category + (isPers(rec) ? ' (personal).' : '.');
     gotoMonthOf(date);
   }
   function removeExpense(id) {
@@ -215,9 +249,8 @@
       var o = {}; o[id.slice(4)] = true;
       db.collection('settings').doc('skips').set(o, { merge: true }).catch(function () {});
     }
-    renderList();
+    renderList(); renderPersonal();
   }
-  function saveBudgets() { db.collection('settings').doc('budgets').set(Object.assign({}, S.budgets)).catch(function () {}); }
 
   /* ---------- week tab ---------- */
   function weekRange(off) {
@@ -230,17 +263,21 @@
     var r = weekRange(S.weekOff), nw = new Date();
     $('weektitle').textContent = shortDay(r.s) + ' to ' + shortDay(r.e);
     $('wnext').disabled = S.weekOff >= 0;
-    var spent = 0, ev = 0, byCat = {}, byDay = {};
+    var spent = 0, ev = 0, byCat = {}, byDay = {}, pers = 0;
     S.weekExp.forEach(function (e) {
-      spent += e.amount; byCat[e.category] = (byCat[e.category] || 0) + e.amount; byDay[e.date] = true;
+      byDay[e.date] = true;
+      if (isPers(e)) { pers += e.amount; return; }
+      spent += e.amount; byCat[e.category] = (byCat[e.category] || 0) + e.amount;
       if (EVERYDAY.indexOf(e.category) >= 0) ev += e.amount;
     });
     var dim = new Date(r.s.getFullYear(), r.s.getMonth() + 1, 0).getDate();
-    var allow = EVERYDAY.reduce(function (s, n) { return s + budgetOf(n); }, 0) * 7 / dim;
+    var wmk = mkOf(r.s);
+    var allow = EVERYDAY.reduce(function (s, n) { return s + budgetOf(n, wmk); }, 0) * 7 / dim;
     var left = allow - ev;
     var html = '<div class="tot dark"><div class="label">Spent this week</div><b class="num">' + rs(spent) + '</b></div>' +
       '<div class="tot"><div class="label">Everyday spending</div><b class="num">' + rs(ev) + '</b>' + (allow > 0 ? '<small>of about ' + rs(allow) + ' a week</small>' : '') + '</div>';
     if (allow > 0) html += '<div class="tot"><div class="label">' + (left >= 0 ? 'Everyday left' : 'Everyday over') + '</div><b class="num" style="color:' + (left >= 0 ? 'var(--ok)' : 'var(--bad)') + '">' + rs(Math.abs(left)) + '</b></div>';
+    if (pers > 0) html += '<div class="tot"><div class="label">Personal spending</div><b class="num">' + rs(pers) + '</b><small>not counted above</small></div>';
     $('weektotals').innerHTML = html;
 
     // days with nothing logged
@@ -263,26 +300,56 @@
 
     // budget watch (always for the real current month)
     var cm = curMk(), byC = {}, w = '';
-    S.curExp.forEach(function (e) { byC[e.category] = (byC[e.category] || 0) + e.amount; });
+    sharedOnly(S.curExp).forEach(function (e) { byC[e.category] = (byC[e.category] || 0) + e.amount; });
     CATS.forEach(function (c) {
-      var cap = budgetOf(c.n) * (c.every || 1), sp = byC[c.n] || 0;
+      var cap = budgetOf(c.n, cm) * (c.every || 1), sp = byC[c.n] || 0;
       if (cap > 0 && sp > cap * 0.85) {
         var pct = Math.min(100, sp / cap * 100);
         w += '<div class="bar ' + (sp > cap ? 'over' : 'warn') + '"><div style="font-weight:600">' + esc(c.n) + '</div><div class="num">' + rs(sp) + ' <span class="muted">of ' + rs(cap) + '</span></div><div class="track"><div class="fill" style="width:' + pct + '%"></div></div><div class="sub">' + (sp > cap ? rs(sp - cap) + ' over' : rs(cap - sp) + ' left') + '</div></div>';
       }
     });
-    var evMtd = 0, evBud = EVERYDAY.reduce(function (s, n) { return s + budgetOf(n); }, 0);
+    var evMtd = 0, evBud = EVERYDAY.reduce(function (s, n) { return s + budgetOf(n, cm); }, 0);
     EVERYDAY.forEach(function (n) { evMtd += byC[n] || 0; });
     var dm = new Date(nw.getFullYear(), nw.getMonth() + 1, 0).getDate(), pace = '';
     if (evBud > 0) pace = '<div class="muted" style="margin-top:10px">Everyday spending in ' + esc(monthName(cm)) + ': ' + rs(evMtd) + ' of ' + rs(evBud) + ' after ' + nw.getDate() + ' of ' + dm + ' days' + (evMtd / evBud > nw.getDate() / dm + 0.1 ? ', ahead of the month. Slow down a little.' : ', on pace.') + '</div>';
     $('watch').innerHTML = (w ? '<div style="display:flex;flex-direction:column;gap:14px">' + w + '</div>' : '<div class="muted">No budget line is close to its limit in ' + esc(monthName(cm)) + '.</div>') + pace;
   }
 
+  /* ---------- personal tab ---------- */
+  function renderPersonal() {
+    var mk = monthKey(), me = nameOf(S.user && S.user.email), html = '';
+    [N1, N2].forEach(function (n) {
+      var list = S.expenses.filter(function (e) { return isPers(e) && ownerOf(e) === n; }).sort(function (a, b) {
+        if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+        return (b.createdAt || 0) - (a.createdAt || 0);
+      });
+      var spent = list.reduce(function (s, e) { return s + e.amount; }, 0), b = pBud(n, mk), mine = n === me;
+      var pct = b > 0 ? Math.min(100, spent / b * 100) : (spent > 0 ? 100 : 0);
+      var cls = b > 0 ? (spent > b ? 'over' : (spent > b * 0.85 ? 'warn' : '')) : (spent > 0 ? 'warn' : '');
+      var sub = b <= 0 ? 'No personal budget set' : (spent > b ? rs(spent - b) + ' over' : rs(b - spent) + ' left');
+      html += '<section class="panel"><div class="panelhead"><h2>' + esc(n) + (mine ? ' (you)' : '') + '</h2>' +
+        (mine ? '<button class="ghost" type="button" data-padd="1">Add personal expense</button>' : '') + '</div>' +
+        '<div class="bar ' + cls + '"><div style="font-weight:600">Personal budget</div><div class="num">' + rs(spent) + ' <span class="muted">of ' +
+        (mine ? '<input class="inl" type="number" inputmode="numeric" min="0" step="500" data-pbud="' + esc(n) + '" value="' + b + '" aria-label="Personal budget for ' + esc(n) + '">' : rs(b)) +
+        '</span></div><div class="track"><div class="fill" style="width:' + pct + '%"></div></div><div class="sub">' + esc(sub) + '</div></div>';
+      if (list.length) {
+        list.forEach(function (e) {
+          html += '<div class="row"><div><div class="what">' + esc(e.category) + (e.note ? ' · <span style="font-weight:400">' + esc(e.note) + '</span>' : '') + '</div>' +
+            '<div class="meta">' + esc(shortDay(new Date(e.date + 'T00:00:00'))) + '</div></div><div class="amt num">' + rs(e.amount) + '</div>' +
+            (mine ? '<div class="acts">' + (S.confirm === 'e:' + e.id ? '<span class="confirm">Delete? <button type="button" class="yes" data-del="' + esc(e.id) + '">Yes</button><button type="button" data-cancel="1">No</button></span>' : '<button type="button" class="link" data-ask="' + esc(e.id) + '">Delete</button>') + '</div>' : '') + '</div>';
+        });
+      } else html += '<div class="muted">No personal spending for ' + esc(monthLabel()) + '.</div>';
+      html += '</section>';
+    });
+    html += '<div class="muted">Personal spending is not part of the household budget or settle-up. Add it from the Month tab by choosing "personal" under Paid from. A budget change applies from ' + esc(monthLabel()) + ' onward.</div>';
+    $('pbox').innerHTML = html;
+  }
+
   /* ---------- settle tab ---------- */
   function renderSettle() {
     var pg = 0, pa = 0;
     S.expenses.forEach(function (e) { if (e.paidFrom === N1) pg += e.amount; else if (e.paidFrom === N2) pa += e.amount; });
-    var P = pg + pa, sh1 = S.split / 100, share1 = P * sh1, share2 = P - share1;
+    var sp = splitOf(), P = pg + pa, sh1 = sp / 100, share1 = P * sh1, share2 = P - share1;
     var bal = pg - share1; // positive: N2 owes N1
     S.settle.forEach(function (s) { if (s.from === N2 && s.to === N1) bal -= s.amount; else if (s.from === N1 && s.to === N2) bal += s.amount; });
     var debtor = bal > 0 ? N2 : N1, creditor = bal > 0 ? N1 : N2, amt = Math.abs(bal);
@@ -293,8 +360,8 @@
       '<span class="k">Paid from ' + esc(N1) + "'s own account</span><span class=\"v num\">" + rs(pg) + '</span>' +
       '<span class="k">Paid from ' + esc(N2) + "'s own account</span><span class=\"v num\">" + rs(pa) + '</span>' +
       '<span class="k">Total paid from own accounts</span><span class="v num">' + rs(P) + '</span>' +
-      '<span class="k">' + esc(N1) + "'s share (" + S.split + '%)</span><span class="v num">' + rs(share1) + '</span>' +
-      '<span class="k">' + esc(N2) + "'s share (" + (100 - S.split) + '%)</span><span class="v num">' + rs(share2) + '</span></div>' +
+      '<span class="k">' + esc(N1) + "'s share (" + sp + '%)</span><span class="v num">' + rs(share1) + '</span>' +
+      '<span class="k">' + esc(N2) + "'s share (" + (100 - sp) + '%)</span><span class="v num">' + rs(share2) + '</span></div>' +
       '<div class="muted">Only expenses paid from ' + esc(N1) + ' or ' + esc(N2) + ' count here. Payments from the joint account are already shared.</div>';
     if (amt >= 1) {
       html += '<form id="payform" class="form" autocomplete="off"><label class="field"><span>Amount paid (₹)</span><input id="payamt" type="number" inputmode="decimal" min="1" step="any" value="' + Math.round(amt) + '"></label>' +
@@ -302,8 +369,8 @@
     }
     $('settlebox').innerHTML = html;
     $('splitlabel').textContent = N1 + "'s share of shared costs (%)";
-    if (document.activeElement !== $('splitpct')) $('splitpct').value = S.split;
-    $('splitnote').textContent = N2 + ' covers the other ' + (100 - S.split) + '%. Both of you see the same number.';
+    if (document.activeElement !== $('splitpct')) $('splitpct').value = sp;
+    $('splitnote').textContent = N2 + ' covers the other ' + (100 - sp) + '%. A change applies from ' + monthLabel() + ' onward. Earlier months keep their old split.';
     var list = S.settle.slice().sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
     $('payments').innerHTML = list.length ? list.map(function (s) {
       return '<div class="row"><div><div class="what">' + esc(s.from) + ' paid ' + esc(s.to) + '</div><div class="meta">' + esc(shortDay(new Date(s.date + 'T00:00:00'))) + (s.by ? ' · added by ' + esc(nameOf(s.by)) : '') + '</div></div><div class="amt num">' + rs(s.amount) + '</div><div class="acts">' +
@@ -316,7 +383,7 @@
     if (!(a > 0)) { msg.className = 'msg err'; msg.textContent = 'Enter an amount above zero.'; return; }
     var pg = 0, pa = 0;
     S.expenses.forEach(function (e) { if (e.paidFrom === N1) pg += e.amount; else if (e.paidFrom === N2) pa += e.amount; });
-    var bal = pg - (pg + pa) * S.split / 100;
+    var bal = pg - (pg + pa) * splitOf() / 100;
     S.settle.forEach(function (s) { if (s.from === N2 && s.to === N1) bal -= s.amount; else if (s.from === N1 && s.to === N2) bal += s.amount; });
     var from = bal > 0 ? N2 : N1, to = bal > 0 ? N1 : N2;
     var nw = new Date(), mk = monthKey();
@@ -459,7 +526,7 @@
   }
   function renderAll() {
     $('monthname').textContent = monthLabel();
-    renderTotals(); renderBars(); renderList(); renderSettle();
+    renderTotals(); renderBars(); renderList(); renderSettle(); renderPersonal();
   }
 
   function startApp(user) {
@@ -467,7 +534,10 @@
     $('loginview').hidden = true; $('appview').hidden = false; $('tabbar').hidden = false;
     $('who').textContent = 'Signed in as ' + nameOf(user.email);
     sub('budgets', db.collection('settings').doc('budgets'), function (snap) {
-      if (snap.exists) { var d = snap.data(); CATS.forEach(function (c) { if (typeof d[c.n] === 'number') S.budgets[c.n] = d[c.n]; }); renderTotals(); renderBars(); renderWeek(); }
+      if (snap.exists) { var d = snap.data(); CATS.forEach(function (c) { if (typeof d[c.n] === 'number') S.budgets[c.n] = d[c.n]; }); renderAll(); renderWeek(); }
+    });
+    sub('history', db.collection('settings').doc('history'), function (snap) {
+      S.hist = snap.exists ? snap.data() : {}; renderAll(); renderWeek();
     });
     sub('split', db.collection('settings').doc('split'), function (snap) {
       if (snap.exists && typeof snap.data().first === 'number') { S.split = snap.data().first; renderSettle(); }
@@ -489,13 +559,13 @@
   }
 
   /* ---------- tabs ---------- */
-  var TABS = ['month', 'week', 'settle', 'bills', 'goals'];
+  var TABS = ['month', 'week', 'settle', 'personal', 'bills', 'goals'];
   function showTab(name) {
     if (TABS.indexOf(name) < 0) name = 'month';
     S.tab = name; S.confirm = null; lsSet('kb-tab', name);
     TABS.forEach(function (t) { $('tab-' + t).hidden = t !== name; });
     each($('tabbar').children, function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-tab') === name ? 'true' : 'false'); });
-    $('monthnav').hidden = !(name === 'month' || name === 'settle');
+    $('monthnav').hidden = !(name === 'month' || name === 'settle' || name === 'personal');
     renderAll(); renderWeek(); renderBills(); renderGoals();
     window.scrollTo(0, 0);
   }
@@ -503,7 +573,8 @@
   /* ---------- wiring ---------- */
   $('category').innerHTML = catOptions();
   $('bcat').innerHTML = catOptions();
-  $('bpaid').innerHTML = payOptions();
+  $('bpaid').innerHTML = payOptions(false);
+  $('paidsel').innerHTML = payOptions(true);
   $('bstart').value = curMk();
   $('date').value = S.today; $('dday').value = S.today;
   resetRows(); setMode(S.mode);
@@ -517,20 +588,24 @@
   $('dayform').addEventListener('submit', saveDay);
   $('addrow').onclick = function () { $('drows').insertAdjacentHTML('beforeend', dayRowHtml()); };
   $('drows').addEventListener('input', updateDayTotal);
-  $('paid').addEventListener('click', function (ev) {
-    var b = ev.target.closest('button'); if (!b) return;
-    S.paid = b.getAttribute('data-v');
-    each($('paid').children, function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+  function followPaid(selectEl, catEl) { // personal spending has its own category list
+    var wantPers = selectEl.value.indexOf(PREFIX) === 0, isP = catEl.getAttribute('data-p') === '1';
+    if (wantPers !== isP) { catEl.innerHTML = catOptions(wantPers); catEl.setAttribute('data-p', wantPers ? '1' : '0'); }
+  }
+  $('paidsel').addEventListener('change', function () { followPaid($('paidsel'), $('category')); });
+  $('drows').addEventListener('change', function (ev) {
+    if (ev.target.className === 'd-paid') followPaid(ev.target, ev.target.closest('.drow').querySelector('.d-cat'));
   });
   $('editbudgets').onclick = function () { S.editing = !S.editing; renderBars(); };
   $('bars').addEventListener('change', function (ev) {
     var c = ev.target.getAttribute && ev.target.getAttribute('data-cat'); if (!c) return;
-    S.budgets[c] = Math.max(0, Number(ev.target.value) || 0);
-    renderTotals(); saveBudgets();
+    var v = Math.max(0, Number(ev.target.value) || 0);
+    saveCfg(monthKey(), function (snap) { snap.cats[c] = v; });
   });
   function confirmClicks(ev) {
     var t = ev.target, g = function (a) { return t.getAttribute && t.getAttribute(a); };
-    if (g('data-ask')) { S.confirm = 'e:' + g('data-ask'); renderList(); }
+    if (g('data-padd')) { showTab('month'); setMode('one'); $('paidsel').value = PREFIX + nameOf(S.user && S.user.email); followPaid($('paidsel'), $('category')); $('amount').focus(); }
+    else if (g('data-ask')) { S.confirm = 'e:' + g('data-ask'); renderList(); renderPersonal(); }
     else if (g('data-del')) removeExpense(g('data-del'));
     else if (g('data-sask')) { S.confirm = 's:' + g('data-sask'); renderSettle(); }
     else if (g('data-sdel')) { S.confirm = null; db.collection('settlements').doc(g('data-sdel')).delete().catch(function () {}); renderSettle(); }
@@ -540,15 +615,20 @@
     else if (g('data-gdel')) { S.confirm = null; db.collection('goals').doc(g('data-gdel')).delete().catch(function () {}); renderGoals(); }
     else if (g('data-gadd')) moveMoney(g('data-gadd'), 1);
     else if (g('data-gtake')) moveMoney(g('data-gtake'), -1);
-    else if (g('data-cancel')) { S.confirm = null; renderList(); renderSettle(); renderBills(); renderGoals(); }
+    else if (g('data-cancel')) { S.confirm = null; renderList(); renderPersonal(); renderSettle(); renderBills(); renderGoals(); }
     else if (g('data-logday')) { var d = g('data-logday'); showTab('month'); setMode('day'); $('dday').value = d; $('dday').scrollIntoView(); }
   }
-  ['list', 'payments', 'billlist', 'goallist', 'missing'].forEach(function (id) { $(id).addEventListener('click', confirmClicks); });
+  ['list', 'pbox', 'payments', 'billlist', 'goallist', 'missing'].forEach(function (id) { $(id).addEventListener('click', confirmClicks); });
+  $('pbox').addEventListener('change', function (ev) {
+    var n = ev.target.getAttribute && ev.target.getAttribute('data-pbud'); if (!n) return;
+    var v = Math.max(0, Number(ev.target.value) || 0);
+    saveCfg(monthKey(), function (snap) { snap.personal[n] = v; });
+  });
   $('settlebox').addEventListener('submit', function (ev) { if (ev.target.id === 'payform') recordPayment(ev); });
   $('splitpct').addEventListener('change', function () {
-    var n = Math.round(Number($('splitpct').value)); if (!(n >= 0 && n <= 100)) n = S.split;
-    S.split = n; $('splitpct').value = n; renderSettle();
-    db.collection('settings').doc('split').set({ first: n }).catch(function () {});
+    var n = Math.round(Number($('splitpct').value)); if (!(n >= 0 && n <= 100)) n = splitOf();
+    $('splitpct').value = n;
+    saveCfg(monthKey(), function (snap) { snap.split = n; });
   });
   $('billform').addEventListener('submit', addBill);
   $('usual').onclick = addUsual;

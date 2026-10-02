@@ -52,3 +52,9 @@ window.USUAL_BILLS = [
   { cat: "Light bill", day: 1, paid: "Joint account" },
   { cat: "Gas", day: 1, paid: "Joint account" }
 ];
+
+// 7. Personal spending. Pick "personal" under Paid from when adding an expense.
+//    These are the categories for it, and each person's monthly personal budget (₹).
+//    You can change the budgets inside the app (Personal tab).
+window.PERSONAL_CATS = ["Shopping", "Food and coffee", "Fun and outings", "Self-care", "Gifts", "Other"];
+window.PERSONAL_BUDGET = { Gautami: 0, Akash: 0 };
