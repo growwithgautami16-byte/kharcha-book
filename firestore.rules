@@ -1,0 +1,22 @@
+rules_version = '2';
+// Only Gautami and Akash can read or write Kharcha Book.
+// Replace akashsiddhpura15@gmail.com with Akash's login email (same as in config.js).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isUs() {
+      return request.auth != null &&
+        request.auth.token.email in ['growwithgautami16@gmail.com', 'akashsiddhpura15@gmail.com'];
+    }
+    match /expenses/{id} {
+      allow read, delete: if isUs();
+      allow create, update: if isUs()
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.amount < 10000000
+        && request.resource.data.month is string;
+    }
+    match /settings/{id} {
+      allow read, write: if isUs();
+    }
+  }
+}
